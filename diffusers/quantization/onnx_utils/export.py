@@ -103,6 +103,60 @@ AXES_NAME = {
         "guidance": {0: "batch_size"},
         "output": {0: "batch_size"},
     },
+    "RealVisXL_V5": {
+        "sample": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "sample": {0: "batch_size"},
+
+        # "timestep": {0: "steps"},
+        "encoder_hidden_states": {0: "batch_size", 1: "sequence_length"},
+        # "down_block_additional_residuals": ({0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        #                                    {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"}),
+        # "down_block_additional_residuals_0": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_1": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_2": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_3": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_4": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_5": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_6": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_7": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "down_block_additional_residuals_8": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        
+        # "mid_block_additional_residual":{0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "mid_block_additional_residual":{0: "batch_size", 1: "num_channels"},
+        
+        # "text_embeds": {0: "batch_size"},
+        # "time_ids": {0: "batch_size"},
+        # # "latent": {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"},
+        # "latent": {0: "batch_size", 1: "num_channels"},
+
+        # "negative_prompt": {0: "batch_size"},
+        # "prompt": {0: "batch_size"},
+        # "image": [{0: "batch_size", 1: "num_channels", 2: "height", 3: "width"}, {0: "batch_size", 1: "num_channels", 2: "height", 3: "width"}],
+
+        # "generator": {0: "generator"},
+        # "num_images_per_prompt": {0: "num_images_per_prompt"},
+        # "num_inference_steps": {0: "num_inference_steps"},
+        # "guidance_scale": {0: "guidance_scale"},
+        # "height": {0: "width"},
+        # "width": {0: "height"},
+        # "controlnet_conditioning_scale": {0: "scale0", 1: "scale1"},
+        #===============================================================
+        # latent_model_input,
+        # t,
+        # encoder_hidden_states=prompt_embeds,
+        # timestep_cond=timestep_cond,
+        # cross_attention_kwargs=self.cross_attention_kwargs,
+        # down_block_additional_residuals=down_block_res_samples,
+        # mid_block_additional_residual=mid_block_res_sample,
+        # added_cond_kwargs=added_cond_kwargs,
+    },
 }
 
 # Per-tensor for INT8, we will convert it to FP8 later in onnxgraphsurgeon
@@ -186,6 +240,39 @@ def generate_dummy_inputs(sd_version, device, is_infer=False):
         )
         dummy_input["txt_ids"] = torch.randn(1, 512, 3, dtype=torch.float32, device=device)
         dummy_input["guidance"] = torch.randn(1, dtype=torch.float32, device=device)
+    elif sd_version == "RealVisXL_V5":
+        dummy_input["sample"] = torch.ones(8, 4, 128, 128).to(device).half()
+        dummy_input["timestep"] = torch.ones(1).to(device).half()
+        dummy_input["encoder_hidden_states"] = torch.ones(8, 77, 2048).to(device).half()
+        dummy_input["added_cond_kwargs"] = {}
+        dummy_input["added_cond_kwargs"]["text_embeds"] = torch.ones(8, 1280).to(device).half()
+        dummy_input["added_cond_kwargs"]["time_ids"] = torch.ones(8, 6).to(device).half()
+        dummy_input["down_block_additional_residuals"] = (
+            torch.ones(8, 320, 128, 128).to(device).half(),
+            torch.ones(8, 320, 128, 128).to(device).half(),
+            torch.ones(8, 320, 128, 128).to(device).half(),
+            torch.ones(8, 320, 64, 64).to(device).half(),
+            torch.ones(8, 640, 64, 64).to(device).half(),
+            torch.ones(8, 640, 64, 64).to(device).half(),
+            torch.ones(8, 640, 32, 32).to(device).half(),
+            torch.ones(8, 1280, 32, 32).to(device).half(),
+            torch.ones(8, 1280, 32, 32).to(device).half(),
+        )
+        # dummy_input["down_block_additional_residuals"] = []
+        # dummy_input["down_block_additional_residuals_0"] = torch.ones(8, 320, 128, 128).to(device).half(),
+        # dummy_input["down_block_additional_residuals_1"] = torch.ones(8, 320, 128, 128).to(device).half(),
+        # dummy_input["down_block_additional_residuals_2"] = torch.ones(8, 320, 128, 128).to(device).half(),
+        # dummy_input["down_block_additional_residuals_3"] = torch.ones(8, 320, 64, 64).to(device).half(),
+        # dummy_input["down_block_additional_residuals_4"] = torch.ones(8, 640, 64, 64).to(device).half(),
+        # dummy_input["down_block_additional_residuals_5"] = torch.ones(8, 640, 64, 64).to(device).half(),
+        # dummy_input["down_block_additional_residuals_6"] = torch.ones(8, 640, 32, 32).to(device).half(),
+        # dummy_input["down_block_additional_residuals_7"] = torch.ones(8, 1280, 32, 32).to(device).half(),
+        # dummy_input["down_block_additional_residuals_8"] = torch.ones(8, 1280, 32, 32).to(device).half(),
+        
+        dummy_input["mid_block_additional_residual"] = torch.ones(8, 1280, 32, 32).to(device).half()
+
+        # dummy_input["text_embeds"] = torch.ones(8, 1280).to(device).half()
+        # dummy_input["time_ids"] = torch.ones(8, 6).to(device).half()
     else:
         raise NotImplementedError(f"Unsupported sd_version: {sd_version}")
 
@@ -217,6 +304,25 @@ def modelopt_export_sd(backbone, onnx_dir, model_name, precision):
             "guidance",
         ]
         output_names = ["output"]
+    elif model_name == "RealVisXL_V5":
+        input_names = [
+            'sample',
+            'timestep',
+            'encoder_hidden_states',
+            'text_embeds',
+            'time_ids',          
+            'down_block_additional_residuals_0',
+            'down_block_additional_residuals_1',
+            'down_block_additional_residuals_2',
+            'down_block_additional_residuals_3',
+            'down_block_additional_residuals_4',
+            'down_block_additional_residuals_5',
+            'down_block_additional_residuals_6',
+            'down_block_additional_residuals_7',
+            'down_block_additional_residuals_8',
+            'mid_block_additional_residual',
+            ]
+        output_names = ["latent"]
     else:
         raise NotImplementedError(f"Unsupported sd_version: {model_name}")
 
@@ -224,7 +330,9 @@ def modelopt_export_sd(backbone, onnx_dir, model_name, precision):
     do_constant_folding = True
     opset_version = 17
 
+    # import pdb;pdb.set_trace()
     # Copied from Huggingface's Optimum
+    import pdb;pdb.set_trace()
     onnx_export(
         backbone,
         (dummy_inputs,),
@@ -235,7 +343,7 @@ def modelopt_export_sd(backbone, onnx_dir, model_name, precision):
         do_constant_folding=do_constant_folding,
         opset_version=opset_version,
     )
-
+    import pdb;pdb.set_trace()
     onnx_model = onnx.load(str(output), load_external_data=False)
     model_uses_external_data = check_model_uses_external_data(onnx_model)
 

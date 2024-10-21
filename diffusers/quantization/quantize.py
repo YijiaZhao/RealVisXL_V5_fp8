@@ -33,13 +33,19 @@ from diffusers import (
     FluxPipeline,
     StableDiffusion3Pipeline,
     StableDiffusionPipeline,
+    StableDiffusionXLControlNetPipeline,
+    ControlNetModel,
+    DPMSolverMultistepScheduler,
 )
 from onnx_utils.export import generate_fp8_scales, modelopt_export_sd
 from utils import check_lora, filter_func, load_calib_prompts, quantize_lvl, set_fmha
 
 import modelopt.torch.opt as mto
 import modelopt.torch.quantization as mtq
+from controlnet_aux import PidiNetDetector
 
+import random
+import diffusers
 MODEL_ID = {
     "sdxl-1.0": "stabilityai/stable-diffusion-xl-base-1.0",
     "sdxl-turbo": "stabilityai/sdxl-turbo",
@@ -47,6 +53,7 @@ MODEL_ID = {
     "sd2.1-base": "stabilityai/stable-diffusion-2-1-base",
     "sd3-medium": "stabilityai/stable-diffusion-3-medium-diffusers",
     "flux-dev": "black-forest-labs/FLUX.1-dev",
+    "RealVisXL_V5": "SG161222/RealVisXL_V5.0",
 }
 
 # You can include the desired arguments for calibration at this point.
@@ -74,7 +81,30 @@ def do_calibrate(pipe, calibration_prompts, **kwargs):
             else {}
             # Also, you can add the negative_prompt when doing the calibration if the model allows
         )
-        pipe(**common_args, **other_args).images
+        images_input = [torch.load("../../inpaint_control_image_tensor.pth").cuda(), torch.load("../../edge_image_tensor.pth").cuda()]
+        generator = torch.manual_seed(random.randint(0,31337))
+        
+        # import pdb;pdb.set_trace()
+        # RealVisXL_V5: diffusers.pipelines.controlnet.pipeline_controlnet_sd_xl.StableDiffusionXLControlNetPipeline
+        # sd1.0: diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl.StableDiffusionXLPipeline 
+        
+        
+        # diffusers.models.unets.unet_2d_condition.UNet2DConditionModel
+        if isinstance(pipe, diffusers.pipelines.controlnet.pipeline_controlnet_sd_xl.StableDiffusionXLControlNetPipeline):
+            pipe(
+                negative_prompt=prompts[0],
+                prompt=prompts[1],
+                image=images_input,
+                generator=generator,
+                num_images_per_prompt=4,
+                num_inference_steps=20,
+                guidance_scale=7,
+                height=1024,
+                width=1024,
+                controlnet_conditioning_scale=[0.5, 0.6]).images
+        else:
+            # import pdb;pdb.set_trace()
+            pipe(**common_args, **other_args).images
 
 
 def main():
@@ -96,6 +126,7 @@ def main():
             "sd2.1-base",
             "sd3-medium",
             "flux-dev",
+            "RealVisXL_V5",
         ],
     )
     parser.add_argument(
@@ -155,6 +186,29 @@ def main():
             MODEL_ID[args.model],
             torch_dtype=torch.bfloat16,
         )
+    elif args.model == "RealVisXL_V5":
+        controlnets = []
+        controlnets.append(ControlNetModel.from_pretrained("alimama-creative/EcomXL_controlnet_inpaint", torch_dtype=torch.float16, use_safetensors=True))
+        controlnets.append(ControlNetModel.from_pretrained("alimama-creative/EcomXL_controlnet_softedge", torch_dtype=torch.float16, use_safetensors=True))
+        
+        pipe = StableDiffusionXLControlNetPipeline.from_pretrained(
+            MODEL_ID[args.model],
+            controlnet=controlnets, 
+            safety_checker=None,
+            torch_dtype=torch.float16
+        )
+        
+        pipe.enable_vae_slicing()
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config, algorithm_type='sde-dpmsolver++', use_karras_sigmas=True)
+
+        edge_processor = PidiNetDetector.from_pretrained('lllyasviel/Annotators')
+
+        lora_dir = '/SD/SDXL_minimum_pipeline/'
+        lora_name = 'kitchen.safetensors'
+        lora_scale = 0.6
+        trigger_words = 'kitchen'
+        pipe.load_lora_weights(lora_dir, weight_name=lora_name)
+        pipe.fuse_lora(lora_scale=lora_scale)
     else:
         pipe = DiffusionPipeline.from_pretrained(
             MODEL_ID[args.model],
@@ -165,10 +219,10 @@ def main():
     pipe.to("cuda")
 
     backbone = pipe.unet if args.model not in ["sd3-medium", "flux-dev"] else pipe.transformer
-
+    # import pdb;pdb.set_trace()
     if args.quant_level == 4.0:
         assert args.format != "int8", "We only support fp8 for Level 4 Quantization"
-        assert args.model == "sdxl-1.0", "We only support fp8 for SDXL on Level 4"
+        assert args.model in ["sdxl-1.0", "RealVisXL_V5"], "We only support fp8 for SDXL on Level 4"
         set_fmha(backbone)
     if not args.restore_from:
         # This is a list of prompts
